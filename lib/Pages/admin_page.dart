@@ -1,10 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:mess_management_app/providers/dinner_provider.dart';
-import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:mess_management_app/services/admin_service.dart';
 import 'role_selection_page.dart';
 
 class AdminPage extends StatefulWidget {
@@ -15,24 +12,19 @@ class AdminPage extends StatefulWidget {
 }
 
 class _AdminPageState extends State<AdminPage> {
+  final AdminService _adminService = AdminService();
   int _currentIndex = 0;
 
-  final Map<String, List<String>> _menuData = {
-    "Breakfast": ["Pancakes", "Scrambled Eggs", "Tea/Coffee"],
-    "Lunch": ["Rice", "Dal", "Vegetable Curry", "Chapati", "Salad"],
-    "Dinner": ["Soup", "Fried Rice", "Paneer Butter Masala", "Naan"],
+  // Separate files for students and weekly menu
+  File? _studentFile;
+  File? _menuFile;
+
+  // For menu editing
+  final Map<String, TextEditingController> _controllers = {
+    "Breakfast": TextEditingController(),
+    "Lunch": TextEditingController(),
+    "Dinner": TextEditingController(),
   };
-
-  final Map<String, TextEditingController> _controllers = {};
-  File? _selectedFile;
-
-  @override
-  void initState() {
-    super.initState();
-    _menuData.forEach((key, items) {
-      _controllers[key] = TextEditingController(text: items.join(", "));
-    });
-  }
 
   @override
   void dispose() {
@@ -40,66 +32,80 @@ class _AdminPageState extends State<AdminPage> {
     super.dispose();
   }
 
-  void _saveMenu() {
-    setState(() {
-      _menuData.forEach((key, value) {
-        final text = _controllers[key]?.text ?? "";
-        _menuData[key] = text.split(",").map((e) => e.trim()).toList();
-      });
-    });
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text("Menu updated!")));
-  }
-
-  void _issueToken() {
-    context.read<DinnerProvider>().resetDinner();
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Special dinner token issued!")));
-  }
-
-  Future<void> _pickExcelFile() async {
+  // ---- FILE PICKERS ----
+  Future<void> _pickStudentFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx', 'xls'],
+      type: FileType.any,
+      //allowedExtensions: ['csv'],
     );
 
     if (result != null && result.files.single.path != null) {
-      setState(() {
-        _selectedFile = File(result.files.single.path!);
-      });
+      setState(() => _studentFile = File(result.files.single.path!));
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("File selected: ${_selectedFile!.path}")),
+        SnackBar(content: Text("Student file selected: ${_studentFile!.path.split('/').last}")),
       );
     }
   }
 
-  void _uploadData() {
-    if (_selectedFile == null) {
+  Future<void> _pickMenuFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      //allowedExtensions: ['csv'],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      setState(() => _menuFile = File(result.files.single.path!));
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select an Excel file first.")),
+        SnackBar(content: Text("Menu file selected: ${_menuFile!.path.split('/').last}")),
       );
-      return;
     }
-    // TODO: Upload data to backend
+  }
+
+  // ---- API CALLS ----
+  Future<void> _uploadStudents() async {
+    if (_studentFile == null) return;
+    final success = await _adminService.uploadStudents(_studentFile!);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Excel data uploaded successfully!")),
+      SnackBar(content: Text(success ? "Students uploaded successfully" : "Upload failed")),
     );
   }
 
-  void _resetData() {
-    // TODO: Clear all student data in backend
-    setState(() {
-      _selectedFile = null;
-    });
+  Future<void> _resetStudents() async {
+    final success = await _adminService.resetStudents();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("All student data reset for new semester.")),
+      SnackBar(content: Text(success ? "All students cleared" : "Failed to reset")),
+    );
+  }
+
+  Future<void> _uploadMenu() async {
+    if (_menuFile == null) return;
+    final success = await _adminService.uploadMenu(_menuFile!);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(success ? "Menu uploaded successfully" : "Menu upload failed")),
+    );
+  }
+
+  Future<void> _updateDayMenu(String day) async {
+    final success = await _adminService.updateDayMenu(
+      day,
+      _controllers["Breakfast"]!.text.split(","),
+      _controllers["Lunch"]!.text.split(","),
+      _controllers["Dinner"]!.text.split(","),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(success ? "Menu for $day updated" : "Update failed")),
+    );
+  }
+
+  Future<void> _issueToken() async {
+    final success = await _adminService.issueToken();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(success ? "Special token issued" : "Failed to issue token")),
     );
   }
 
   Future<void> _logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove("role");
-
+    await _adminService.logout();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
@@ -111,120 +117,94 @@ class _AdminPageState extends State<AdminPage> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ListView(
-          children: [
-            const Text(
-              "Edit Mess Menu",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            ..._menuData.entries.map(
-                  (entry) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      entry.key,
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: _controllers[entry.key],
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: "Enter items separated by comma",
-                      ),
-                    ),
-                  ],
+      // ---- Menu Editing Page ----
+      ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text("Edit Mess Menu", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          ..._controllers.entries.map((entry) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: TextField(
+                controller: entry.value,
+                decoration: InputDecoration(
+                  labelText: entry.key,
+                  border: const OutlineInputBorder(),
+                  hintText: "Enter items separated by comma",
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _saveMenu,
-              child: const Text("Save Menu"),
-            ),
-          ],
-        ),
-      ),
-
-      Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              "Special Dinner Token",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _issueToken,
-              child: const Text("Issue Token to All Students"),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              "Note: Students will be able to redeem token once.",
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-
-      Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              "Manage Student Data",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: _pickExcelFile,
-              icon: const Icon(Icons.upload_file),
-              label: const Text("Select Excel File"),
-            ),
-            const SizedBox(height: 10),
-            if (_selectedFile != null)
-              Text("Selected File: ${_selectedFile!.path.split('/').last}"),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _uploadData,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-              ),
-              child: const Text("Upload Data"),
-            ),
-            const SizedBox(height: 40),
-            const Divider(),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _resetData,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                minimumSize: const Size(double.infinity, 50),
-              ),
-              child: const Text("Reset All Data for New Semester"),
-            ),
-          ],
-        ),
-      ),
-
-      Center(
-        child: ElevatedButton.icon(
-          onPressed: _logout,
-          icon: const Icon(Icons.logout),
-          label: const Text("Logout"),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red,
-            minimumSize: const Size(200, 50),
+            );
+          }),
+          ElevatedButton(
+            onPressed: () {
+              final now = DateTime.now();
+              final currentDay = [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday"
+              ][now.weekday - 1];
+              _updateDayMenu(currentDay);
+            },
+            child: const Text("Save Today's Menu"),
           ),
+          const Divider(),
+          ElevatedButton.icon(
+            onPressed: _pickMenuFile,
+            icon: const Icon(Icons.upload_file),
+            label: const Text("Select Menu CSV File"),
+          ),
+          if (_menuFile != null)
+            Text("Selected: ${_menuFile!.path.split('/').last}"),
+          ElevatedButton(
+            onPressed: _uploadMenu,
+            child: const Text("Upload Weekly Menu (CSV)"),
+          ),
+        ],
+      ),
+
+      // ---- Special Token Page ----
+      Center(
+        child: ElevatedButton(
+          onPressed: _issueToken,
+          child: const Text("Issue Special Dinner Token"),
+        ),
+      ),
+
+      // ---- Manage Students Page ----
+      ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          ElevatedButton.icon(
+            onPressed: _pickStudentFile,
+            icon: const Icon(Icons.upload_file),
+            label: const Text("Select Student CSV File"),
+          ),
+          if (_studentFile != null)
+            Text("Selected: ${_studentFile!.path.split('/').last}"),
+          ElevatedButton(
+            onPressed: _uploadStudents,
+            child: const Text("Upload Students"),
+          ),
+          const Divider(),
+          ElevatedButton(
+            onPressed: _resetStudents,
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text("Reset Students"),
+          ),
+        ],
+      ),
+
+      // ---- Settings Page ----
+      Center(
+        child: ElevatedButton(
+          onPressed: _logout,
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          child: const Text("Logout"),
         ),
       ),
     ];
@@ -237,16 +217,12 @@ class _AdminPageState extends State<AdminPage> {
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: "Menu",),
+          BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: "Menu"),
           BottomNavigationBarItem(icon: Icon(Icons.token), label: "Token"),
           BottomNavigationBarItem(icon: Icon(Icons.people), label: "Students"),
           BottomNavigationBarItem(icon: Icon(Icons.settings), label: "Settings"),
         ],
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
+        onTap: (i) => setState(() => _currentIndex = i),
       ),
     );
   }

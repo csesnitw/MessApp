@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mess_management_app/Pages/admin_login_page.dart';
 import 'package:mess_management_app/Pages/admin_page.dart';
 import 'package:mess_management_app/Pages/digital_mess_card.dart';
 import 'package:mess_management_app/Pages/student_home_page.dart';
@@ -38,7 +39,7 @@ class MyApp extends StatelessWidget {
           primarySwatch: Colors.blue,
         ),
         home: initialRole == null
-            ? const StudentLoginPage() //RoleSelectionPage()
+            ? const RoleSelectionPage()
             : StudentHomePage(),
       ),
     );

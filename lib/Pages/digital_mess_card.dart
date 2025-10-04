@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/dinner_provider.dart';
 
 class SpecialDinnerPage extends StatefulWidget {
@@ -30,7 +29,9 @@ class _SpecialDinnerPageState extends State<SpecialDinnerPage>
 
   Future<void> _loadStudentDetails() async {
     try {
-      await context.read<DinnerProvider>().fetchStudentDetails();
+      final provider = context.read<DinnerProvider>();
+      //await provider.loadToken();
+      await provider.fetchStudentDetails();
     } catch (e) {
       debugPrint("Error fetching student details: $e");
       if (mounted) {
@@ -39,9 +40,7 @@ class _SpecialDinnerPageState extends State<SpecialDinnerPage>
         );
       }
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -102,7 +101,6 @@ class _SpecialDinnerPageState extends State<SpecialDinnerPage>
                           ? NetworkImage(provider.photoUrl)
                           : const AssetImage("assets/profile.png")
                       as ImageProvider,
-                      onBackgroundImageError: (_, __) {},
                     ),
                     const SizedBox(width: 20),
                     Expanded(
@@ -125,9 +123,8 @@ class _SpecialDinnerPageState extends State<SpecialDinnerPage>
                           if (!provider.hasEaten)
                             ElevatedButton(
                               onPressed: () => _confirmRedeem(context),
-                              child:
-                              const Text("Redeem Special Dinner"),
-                            ),
+                              child: const Text("Redeem Special Dinner"),
+                            )
                         ],
                       ),
                     ),
@@ -154,13 +151,6 @@ class _SpecialDinnerPageState extends State<SpecialDinnerPage>
             ],
           ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        tooltip: "Reset Token",
-        child: const Icon(Icons.refresh),
-        onPressed: () {
-          context.read<DinnerProvider>().resetDinner();
-        },
       ),
     );
   }
