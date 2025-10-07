@@ -120,7 +120,7 @@ class _SpecialDinnerPageState extends State<SpecialDinnerPage>
                           Text(provider.mess,
                               style: const TextStyle(fontSize: 16)),
                           const SizedBox(height: 10),
-                          if (!provider.hasEaten)
+                          if (provider.token)
                             ElevatedButton(
                               onPressed: () => _confirmRedeem(context),
                               child: const Text("Redeem Special Dinner"),
@@ -131,7 +131,7 @@ class _SpecialDinnerPageState extends State<SpecialDinnerPage>
                   ],
                 ),
               ),
-              if (!provider.hasEaten)
+              if (provider.token)
                 Positioned(
                   top: 8,
                   right: 8,

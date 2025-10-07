@@ -9,7 +9,7 @@ class DinnerProvider extends ChangeNotifier {
   String email = "";
   String photoUrl = "";
   bool hasUploadedPhoto = false;
-  bool hasEaten = false;
+  bool token = false;
   String mess = "";
   String rollNo = "";
 
@@ -23,8 +23,9 @@ class DinnerProvider extends ChangeNotifier {
     hasUploadedPhoto = data["hasUploadedPhoto"] ?? false;
     mess = data["mess"] ?? "";
     rollNo = data["rollNo"] ?? "";
+    token = (data["specialToken"]["active"] == true &&
+        data["specialToken"]["redeemed"] == false);
 
-    hasEaten = data["specialToken"]?["redeemed"] ?? false;
 
     notifyListeners();
   }
@@ -34,7 +35,7 @@ class DinnerProvider extends ChangeNotifier {
     final success = await _dinnerService.syncTokenToBackend(true);
     if (success) {
       print("changed");
-      hasEaten = true;
+      token = false;
       notifyListeners();
     }
   }
@@ -44,7 +45,7 @@ class DinnerProvider extends ChangeNotifier {
     final success = await _dinnerService.syncTokenToBackend(false);
     if (success) {
       print("changed");
-      hasEaten = false;
+      token = true;
       notifyListeners();
     }
   }
